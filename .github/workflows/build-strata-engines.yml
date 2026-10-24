@@ -1,0 +1,250 @@
+name: Build Strata engines
+
+on:
+  workflow_dispatch:
+
+env:
+  STRATA_TAG: v0.2.3.1
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.id }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-hip-gfx1150
+            os: ubuntu-24.04
+            backend: hip
+            variant: gfx1150
+            archs: gfx1150
+            platform: linux-x86_64
+
+          # Uncomment a target block to enable it; see README.md for new targets.
+          # - id: linux-cuda12
+          #   os: ubuntu-24.04
+          #   backend: cuda
+          #   variant: cuda12
+          #   platform: linux-x86_64
+          # - id: linux-cuda13
+          #   os: ubuntu-24.04
+          #   backend: cuda
+          #   variant: cuda13
+          #   platform: linux-x86_64
+          # - id: linux-hip-halo
+          #   os: ubuntu-24.04
+          #   backend: hip
+          #   variant: halo
+          #   platform: linux-x86_64
+          # - id: linux-hip-rx6000
+          #   os: ubuntu-24.04
+          #   backend: hip
+          #   variant: rx6000
+          #   platform: linux-x86_64
+          # - id: linux-hip-rx7900
+          #   os: ubuntu-24.04
+          #   backend: hip
+          #   variant: rx7900
+          #   platform: linux-x86_64
+          # - id: linux-hip-rx9070
+          #   os: ubuntu-24.04
+          #   backend: hip
+          #   variant: rx9070
+          #   platform: linux-x86_64
+          # - id: linux-sycl
+          #   os: ubuntu-24.04
+          #   backend: sycl
+          #   variant: ""
+          #   platform: linux-x86_64
+          # - id: macos-metal
+          #   os: macos-26
+          #   backend: metal
+          #   variant: ""
+          #   platform: macos-arm64
+          # - id: windows-cuda12
+          #   os: windows-2022
+          #   backend: cuda
+          #   variant: cuda12
+          #   platform: windows-x86_64
+          # - id: windows-cuda13
+          #   os: windows-2022
+          #   backend: cuda
+          #   variant: cuda13
+          #   platform: windows-x86_64
+          # - id: windows-hip-rdna2
+          #   os: windows-2022
+          #   backend: hip
+          #   variant: rdna2
+          #   platform: windows-x86_64
+          # - id: windows-hip-rdna3
+          #   os: windows-2022
+          #   backend: hip
+          #   variant: rdna3
+          #   platform: windows-x86_64
+          # - id: windows-hip-rx9070
+          #   os: windows-2022
+          #   backend: hip
+          #   variant: rx9070
+          #   platform: windows-x86_64
+
+    steps:
+      - name: Check out StrataCI
+        uses: actions/checkout@v4
+
+      - name: Check out Strata
+        uses: actions/checkout@v4
+        with:
+          repository: Niko1221/Strata
+          ref: ${{ env.STRATA_TAG }}
+          path: strata
+
+      - name: Record Strata source commit
+        id: source
+        shell: bash
+        run: ./.github/workflows/scripts/record-strata-source.sh
+
+      - name: Set up Python
+        if: matrix.os != 'ubuntu-24.04'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux build tools
+        if: matrix.os == 'ubuntu-24.04'
+        run: ./.github/workflows/scripts/install-linux-tools.sh
+
+      - name: Install Python build dependencies and llama.cpp
+        shell: bash
+        run: ./.github/workflows/scripts/install-strata-build-deps.sh
+
+      - name: Install macOS build tools
+        if: matrix.os == 'macos-26'
+        shell: bash
+        run: ./.github/workflows/scripts/install-macos-tools.sh
+
+      - name: Install metal-cpp
+        if: matrix.backend == 'metal'
+        shell: bash
+        run: ./.github/workflows/scripts/download-metal-cpp.sh
+
+      - name: Build macOS Metal engine
+        if: matrix.backend == 'metal'
+        shell: bash
+        run: ./.github/workflows/scripts/build-macos-metal.sh
+
+      - name: Install Linux CUDA toolkit
+        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'cuda'
+        uses: Jimver/cuda-toolkit@v0.2.27
+        with:
+          cuda: ${{ matrix.variant == 'cuda12' && '12.9.1' || '13.0.0' }}
+          method: network
+
+      - name: Install ROCm toolchain
+        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'hip'
+        shell: bash
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: ./.github/workflows/scripts/install-rocm-linux.sh
+
+      - name: Test Linux HIP packaging
+        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'hip'
+        run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_prepare_linux_hip_package.py'
+
+      - name: Install Intel oneAPI toolchain
+        if: matrix.backend == 'sycl'
+        run: ./.github/workflows/scripts/install-oneapi.sh
+
+      - name: Build Linux engine package
+        if: matrix.os == 'ubuntu-24.04'
+        env:
+          BACKEND: ${{ matrix.backend }}
+          VARIANT: ${{ matrix.variant }}
+          ARCHS: ${{ matrix.archs }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+        run: ./.github/workflows/scripts/build-linux-engine.sh
+
+      - name: Archive Linux engine package
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        env:
+          BACKEND: ${{ matrix.backend }}
+          VARIANT: ${{ matrix.variant }}
+          PLATFORM: ${{ matrix.platform }}
+        run: ./.github/workflows/scripts/archive-linux-engine.sh
+
+      - name: Install Windows build tools
+        if: matrix.os == 'windows-2022'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Windows CUDA toolkit
+        if: matrix.os == 'windows-2022' && matrix.backend == 'cuda'
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: ${{ matrix.variant == 'cuda12' && '12.9.1' || '13.0.0' }}
+          method: network
+          use-github-cache: false
+          use-local-cache: false
+
+      - name: Build Windows CUDA package
+        if: matrix.os == 'windows-2022' && matrix.backend == 'cuda'
+        shell: pwsh
+        env:
+          VARIANT: ${{ matrix.variant }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: .\.github\workflows\scripts\build-windows-cuda.ps1
+
+      - name: Install Windows HIP toolchain
+        if: matrix.os == 'windows-2022' && matrix.backend == 'hip'
+        shell: pwsh
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: .\.github\workflows\scripts\install-windows-hip.ps1
+
+      - name: Build Windows HIP package
+        if: matrix.os == 'windows-2022' && matrix.backend == 'hip'
+        shell: cmd
+        run: .\.github\workflows\scripts\build-windows-hip.cmd
+
+      - name: Prepare desktop engine archive
+        if: matrix.os != 'ubuntu-24.04'
+        shell: pwsh
+        env:
+          BACKEND: ${{ matrix.backend }}
+          VARIANT: ${{ matrix.variant }}
+          PLATFORM: ${{ matrix.platform }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: .\.github\workflows\scripts\archive-windows-engine.ps1
+
+      - name: Upload engine package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish engine release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all engine packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release and upload engine packages
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.STRATA_TAG }}
+          name: Strata engines ${{ env.STRATA_TAG }}
+          files: dist/*.tar.gz
+          fail_on_unmatched_files: true
