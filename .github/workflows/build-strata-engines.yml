@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  STRATA_TAG: v0.2.3.1
+  STRATA_TAG: v0.2.6
 
 permissions:
   contents: read

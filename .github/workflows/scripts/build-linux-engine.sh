@@ -16,14 +16,11 @@ case "${BACKEND:?BACKEND is required}" in
         --archs "$STRATA_REQUIRED_TUNING_ARCHS" --rocm "${HP:?HP is required}" \
         --expect "$STRATA_REQUIRED_TUNING_ARCHS"
     fi
-    pkgver=$(sed -n 's/^[[:space:]]*project([^)]*VERSION[[:space:]]*\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
-    [[ -n "$pkgver" ]] || { echo "Could not determine Strata engine version from CMakeLists.txt" >&2; exit 1; }
     jobs=${JOBS:-$(nproc)}
     if [[ -n "${ARCHS:-}" ]]; then
       VARIANT="${VARIANT:?VARIANT is required}" \
         ARCHS="$ARCHS" \
         JOBS="$jobs" \
-        PKGVER="$pkgver" \
         LLAMA="$PWD/third_party/llama.cpp" \
         COMMIT="${COMMIT:?COMMIT is required}" \
         NO_PACKAGE=1 \
@@ -31,13 +28,14 @@ case "${BACKEND:?BACKEND is required}" in
     else
       VARIANT="${VARIANT:?VARIANT is required}" \
         JOBS="$jobs" \
-        PKGVER="$pkgver" \
         LLAMA="$PWD/third_party/llama.cpp" \
         COMMIT="${COMMIT:?COMMIT is required}" \
         NO_PACKAGE=1 \
         bash packaging/build_hip_linux.sh
     fi
     stage="$PWD/work-$VARIANT/stage"
+    pkgver=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$stage/BUILD.json")
+    [[ "$pkgver" =~ ^[0-9]+(\.[0-9]+)+$ ]] || { echo "Invalid engine package version in $stage/BUILD.json: $pkgver" >&2; exit 1; }
     python3 "$scripts/prepare_linux_hip_package.py" --stage "$stage" --sdk "$HP"
     arch_list=$(python3 -c 'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["archs"]))' "$stage/BUILD.json")
     arch_args=()
