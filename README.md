@@ -12,6 +12,14 @@ All five Linux HIP targets use AMD's TheRock `10.2.0a20260930` SDK with hipBLASL
 
 Linux HIP package versions come from the upstream HIP recipe's staged `BUILD.json`, not the top-level CMake project version. These versions can intentionally differ: Strata 0.2.6 keeps Qwen engine packages at 0.1.50 while Control and DeepSeek use 0.1.51. The package manifest and archive name follow the staged package version; a source-built binary can still report the CMake build version.
 
+### Strata 0.2.7
+
+The workflow checks out [Strata v0.2.7](https://github.com/Niko1221/Strata/releases/tag/v0.2.7) and publishes under the same tag. Upstream now versions both Qwen and DeepSeek engine packages as **0.1.52**. The enabled gfx1150 target picks up this version from the HIP recipe automatically; no package-version override is needed.
+
+The release includes Qwen performance changes for small NVIDIA cards and RX 9000 GPUs, faster DeepSeek prompting, Windows Strix Halo DeepSeek support, expanded chat UI, French localization, and engine correctness fixes. Performance improvements measured on those GPUs should not be assumed to apply to gfx1150.
+
+The Linux HIP toolchain stays pinned to TheRock `10.2.0a20260930`: the 0.2.7 HIP recipe retains its compiler/runtime layout, and its gfx1150 tuning table still targets hipBLASLt `100500`. Our `lib/` and `.kpack/` staging repair remains necessary. The new Windows Strix Halo DeepSeek package targets **gfx1151**, not gfx1150; this workflow still builds the gfx1150 Qwen engine and its CPU/GPU picture readers, not a DeepSeek engine for that GPU. Other targets remain commented out.
+
 Linux HIP builds check required tuning tables before compilation and require them in the verified final package before archiving: `gfx1150`, `gfx1151`, `gfx1100`, and `gfx1201`. Architectures without a matching upstream table, including RX 6000, retain the engine's untuned fallback. RX 6000 does not require the SDK's hipBLASLt kernel-data directory; its rocBLAS data remains required. The native engine automatically selects a packaged table by GPU architecture and loaded hipBLASLt version. When changing the shared SDK pin, update all five checksums and verify library versions and upstream table coverage together; tuning solution IDs are not interchangeable between library versions. Builds validate packaging, not inference correctness or performance on each GPU; hardware qualification is still required.
 
 Each enabled matrix job verifies and uploads its engine package as a temporary workflow artifact. After all enabled builds succeed, the publish job attaches the `.tar.gz` packages to a GitHub Release using `STRATA_TAG`. Disabled targets do not block publishing. Publishing to an existing release does not remove assets from previously enabled targets.
