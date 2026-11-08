@@ -14,7 +14,7 @@ Linux HIP package versions come from the upstream HIP recipe's staged `BUILD.jso
 
 ### Strata 0.2.7
 
-The workflow checks out [Strata v0.2.7](https://github.com/Niko1221/Strata/releases/tag/v0.2.7) and publishes under the same tag. Upstream now versions both Qwen and DeepSeek engine packages as **0.1.52**. The enabled gfx1150 target picks up this version from the HIP recipe automatically; no package-version override is needed.
+The workflow checks out [Strata](https://github.com/Niko1221/Strata) and publishes under the same tag.
 
 The release includes Qwen performance changes for small NVIDIA cards and RX 9000 GPUs, faster DeepSeek prompting, Windows Strix Halo DeepSeek support, expanded chat UI, French localization, and engine correctness fixes. Performance improvements measured on those GPUs should not be assumed to apply to gfx1150.
 
