@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -n "${FAMILY:-}" && "$FAMILY" != qwen ]]; then
+  if [[ "${BACKEND:?BACKEND is required}" == sycl ]]; then
+    set +u
+    source /opt/intel/oneapi/setvars.sh
+    set -u
+  fi
+  python3 .github/workflows/scripts/build_shape_engine.py
+  exit 0
+fi
+
 case "${BACKEND:?BACKEND is required}" in
   cuda)
     cd strata
-    VARIANT="${VARIANT:?VARIANT is required}" bash packaging/build_cuda_linux.sh
+    if [[ "${PLATFORM:?PLATFORM is required}" == linux-aarch64 ]]; then
+      COMMIT="${COMMIT:?COMMIT is required}" bash tools/packaging/build_cuda_linux_aarch64.sh
+    else
+      VARIANT="${VARIANT:?VARIANT is required}" bash tools/packaging/build_cuda_linux.sh
+    fi
     ;;
   hip)
     scripts="$PWD/.github/workflows/scripts"
     cd strata
     if [[ -n "${STRATA_REQUIRED_TUNING_ARCHS?ROCm toolchain setup must run before the HIP build}" ]]; then
       mkdir -p "$RUNNER_TEMP/strata-tuning-check"
-      python3 packaging/stage_tuning.py \
+      python3 tools/packaging/stage_tuning.py \
         --stage "$RUNNER_TEMP/strata-tuning-check" \
         --archs "$STRATA_REQUIRED_TUNING_ARCHS" --rocm "${HP:?HP is required}" \
         --expect "$STRATA_REQUIRED_TUNING_ARCHS"
@@ -21,17 +35,15 @@ case "${BACKEND:?BACKEND is required}" in
       VARIANT="${VARIANT:?VARIANT is required}" \
         ARCHS="$ARCHS" \
         JOBS="$jobs" \
-        LLAMA="$PWD/third_party/llama.cpp" \
         COMMIT="${COMMIT:?COMMIT is required}" \
         NO_PACKAGE=1 \
-        bash packaging/build_hip_linux.sh
+        bash tools/packaging/build_hip_linux.sh
     else
       VARIANT="${VARIANT:?VARIANT is required}" \
         JOBS="$jobs" \
-        LLAMA="$PWD/third_party/llama.cpp" \
         COMMIT="${COMMIT:?COMMIT is required}" \
         NO_PACKAGE=1 \
-        bash packaging/build_hip_linux.sh
+        bash tools/packaging/build_hip_linux.sh
     fi
     stage="$PWD/work-$VARIANT/stage"
     pkgver=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$stage/BUILD.json")
@@ -46,7 +58,7 @@ case "${BACKEND:?BACKEND is required}" in
     if [[ "$VARIANT" == rx6000 ]]; then
       notes+=" (built, not tested on a real RX 6000 card)"
     fi
-    python3 packaging/package_engine.py --src "$stage" --backend hip --version "$pkgver" \
+    python3 tools/packaging/package_engine.py --src "$stage" --backend hip --version "$pkgver" \
       --out "$PWD/work-$VARIANT/components/engine" "${arch_args[@]}" \
       --variant "$VARIANT" --build-id "$COMMIT+rocm" --tree --notes "$notes"
     ;;
@@ -54,7 +66,7 @@ case "${BACKEND:?BACKEND is required}" in
     cd strata
     ONEAPI=/opt/intel/oneapi \
       COMMIT="${COMMIT:?COMMIT is required}" \
-      bash packaging/build_sycl_linux.sh
+      bash tools/packaging/build_sycl_linux.sh
     ;;
   *)
     echo "Unsupported Linux engine backend: $BACKEND" >&2

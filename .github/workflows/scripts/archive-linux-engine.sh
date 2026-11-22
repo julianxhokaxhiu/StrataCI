@@ -2,18 +2,26 @@
 set -euo pipefail
 
 case "${BACKEND:?BACKEND is required}" in
-  cuda) output="strata/out-engine-${VARIANT:?VARIANT is required}" ;;
+  cuda)
+    output="strata/out-engine-${VARIANT:?VARIANT is required}"
+    [[ "${PLATFORM:?PLATFORM is required}" != linux-aarch64 ]] || output+="-aarch64"
+    ;;
   hip) output="strata/work-${VARIANT:?VARIANT is required}/components/engine" ;;
   sycl) output="strata/out-engine-sycl" ;;
   *) echo "Unsupported Linux engine backend: $BACKEND" >&2; exit 1 ;;
 esac
+if [[ -n "${FAMILY:-}" && "$FAMILY" != qwen ]]; then
+  output="strata/out-engine-$FAMILY"
+fi
 
 package=$(find "$output" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -print -quit)
 [[ -n "$package" ]] || { echo "No engine package produced in $output" >&2; exit 1; }
-python3 strata/packaging/package_engine.py --verify "$package"
+python3 strata/tools/packaging/package_engine.py --verify "$package"
 
 if [[ "$BACKEND" == hip ]]; then
   python3 .github/workflows/scripts/prepare_linux_hip_package.py --stage "$package" --verify
+fi
+if [[ "$BACKEND" == hip && "${FAMILY:-qwen}" == qwen ]]; then
   lt_version=$(sed -n 's/.*"hipblaslt_version":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$package/BUILD.json")
   [[ "$lt_version" == "${STRATA_HIPBLASLT_VERSION:?ROCm toolchain setup must run before archiving}" ]] || {
     echo "Unexpected hipBLASLt version in $package/BUILD.json: $lt_version" >&2
@@ -32,7 +40,8 @@ fi
 
 version=${package##*/}
 version=${version%%-*}
-asset="strata-engine-$version-${PLATFORM:?PLATFORM is required}-$BACKEND"
+component=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$package/engine-component.json")
+asset="$component-$version-${PLATFORM:?PLATFORM is required}-$BACKEND"
 [[ -z "${VARIANT:-}" ]] || asset="$asset-$VARIANT"
 mkdir -p dist
 tar -C "$package" -czf "dist/$asset.tar.gz" .

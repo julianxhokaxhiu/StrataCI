@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  STRATA_TAG: v0.2.13
+  STRATA_TAG: v0.2.19
 
 permissions:
   contents: read
@@ -20,12 +20,47 @@ jobs:
         include:
           - id: linux-hip-gfx1150
             os: ubuntu-24.04
+            family: qwen
+            backend: hip
+            variant: gfx1150
+            archs: gfx1150
+            platform: linux-x86_64
+
+          - id: linux-inkling-hip-gfx1150
+            os: ubuntu-24.04
+            family: inkling
+            backend: hip
+            variant: gfx1150
+            archs: gfx1150
+            platform: linux-x86_64
+
+          - id: linux-hy4-hip-gfx1150
+            os: ubuntu-24.04
+            family: hy4
             backend: hip
             variant: gfx1150
             archs: gfx1150
             platform: linux-x86_64
 
           # Uncomment a target block to enable it; see README.md for new targets.
+          # Existing entries default to Qwen; copy one with family: inkling for Inkling.
+          # - id: linux-cuda13-arm64
+          #   os: ubuntu-24.04-arm
+          #   backend: cuda
+          #   variant: cuda13
+          #   platform: linux-aarch64
+          # - id: linux-hy4-sycl
+          #   os: ubuntu-24.04
+          #   family: hy4
+          #   backend: sycl
+          #   variant: ""
+          #   platform: linux-x86_64
+          # - id: windows-inkling-hip-strix
+          #   os: windows-2022
+          #   family: inkling
+          #   backend: hip
+          #   variant: strix
+          #   platform: windows-x86_64
           # - id: linux-cuda12
           #   os: ubuntu-24.04
           #   backend: cuda
@@ -109,16 +144,16 @@ jobs:
         run: ./.github/workflows/scripts/record-strata-source.sh
 
       - name: Set up Python
-        if: matrix.os != 'ubuntu-24.04'
+        if: runner.os != 'Linux'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install Linux build tools
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: ./.github/workflows/scripts/install-linux-tools.sh
 
-      - name: Install Python build dependencies and llama.cpp
+      - name: Install Python build dependencies
         shell: bash
         run: ./.github/workflows/scripts/install-strata-build-deps.sh
 
@@ -128,51 +163,58 @@ jobs:
         run: ./.github/workflows/scripts/install-macos-tools.sh
 
       - name: Install metal-cpp
-        if: matrix.backend == 'metal'
+        if: matrix.backend == 'metal' && (!matrix.family || matrix.family == 'qwen')
         shell: bash
         run: ./.github/workflows/scripts/download-metal-cpp.sh
 
       - name: Build macOS Metal engine
-        if: matrix.backend == 'metal'
+        if: matrix.backend == 'metal' && (!matrix.family || matrix.family == 'qwen')
         shell: bash
         run: ./.github/workflows/scripts/build-macos-metal.sh
 
       - name: Install Linux CUDA toolkit
-        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'cuda'
+        if: runner.os == 'Linux' && matrix.backend == 'cuda' && matrix.platform == 'linux-x86_64'
         uses: Jimver/cuda-toolkit@v0.2.27
         with:
           cuda: ${{ matrix.variant == 'cuda12' && '12.9.1' || '13.0.0' }}
           method: network
 
+      - name: Install ARM64 CUDA toolkit
+        if: runner.os == 'Linux' && matrix.backend == 'cuda' && matrix.platform == 'linux-aarch64'
+        run: bash ./.github/workflows/scripts/install-cuda-arm64.sh
+
       - name: Install ROCm toolchain
-        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'hip'
+        if: runner.os == 'Linux' && matrix.backend == 'hip'
         shell: bash
         env:
           VARIANT: ${{ matrix.variant }}
         run: ./.github/workflows/scripts/install-rocm-linux.sh
 
-      - name: Test Linux HIP packaging
-        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'hip'
-        run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_prepare_linux_hip_package.py'
+      - name: Test engine build helpers
+        shell: bash
+        run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_*.py'
 
       - name: Install Intel oneAPI toolchain
         if: matrix.backend == 'sycl'
         run: ./.github/workflows/scripts/install-oneapi.sh
 
       - name: Build Linux engine package
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         env:
+          FAMILY: ${{ matrix.family || 'qwen' }}
           BACKEND: ${{ matrix.backend }}
           VARIANT: ${{ matrix.variant }}
           ARCHS: ${{ matrix.archs }}
           COMMIT: ${{ steps.source.outputs.commit }}
+          PLATFORM: ${{ matrix.platform }}
         run: ./.github/workflows/scripts/build-linux-engine.sh
 
       - name: Archive Linux engine package
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         shell: bash
         env:
           BACKEND: ${{ matrix.backend }}
+          FAMILY: ${{ matrix.family || 'qwen' }}
           VARIANT: ${{ matrix.variant }}
           PLATFORM: ${{ matrix.platform }}
         run: ./.github/workflows/scripts/archive-linux-engine.sh
@@ -191,7 +233,7 @@ jobs:
           use-local-cache: false
 
       - name: Build Windows CUDA package
-        if: matrix.os == 'windows-2022' && matrix.backend == 'cuda'
+        if: matrix.os == 'windows-2022' && matrix.backend == 'cuda' && (!matrix.family || matrix.family == 'qwen')
         shell: pwsh
         env:
           VARIANT: ${{ matrix.variant }}
@@ -203,18 +245,32 @@ jobs:
         shell: pwsh
         env:
           VARIANT: ${{ matrix.variant }}
+          FAMILY: ${{ matrix.family || 'qwen' }}
         run: .\.github\workflows\scripts\install-windows-hip.ps1
 
       - name: Build Windows HIP package
-        if: matrix.os == 'windows-2022' && matrix.backend == 'hip'
+        if: matrix.os == 'windows-2022' && matrix.backend == 'hip' && (!matrix.family || matrix.family == 'qwen')
         shell: cmd
         run: .\.github\workflows\scripts\build-windows-hip.cmd
 
+      - name: Build desktop Inkling package
+        if: runner.os != 'Linux' && matrix.family == 'inkling'
+        shell: bash
+        env:
+          FAMILY: ${{ matrix.family }}
+          BACKEND: ${{ matrix.backend }}
+          VARIANT: ${{ matrix.variant }}
+          ARCHS: ${{ matrix.archs }}
+          PLATFORM: ${{ matrix.platform }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+        run: python3 .github/workflows/scripts/build_shape_engine.py
+
       - name: Prepare desktop engine archive
-        if: matrix.os != 'ubuntu-24.04'
+        if: runner.os != 'Linux'
         shell: pwsh
         env:
           BACKEND: ${{ matrix.backend }}
+          FAMILY: ${{ matrix.family || 'qwen' }}
           VARIANT: ${{ matrix.variant }}
           PLATFORM: ${{ matrix.platform }}
           SOURCE_COMMIT: ${{ steps.source.outputs.commit }}

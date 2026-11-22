@@ -63,7 +63,7 @@ def prepare(stage: Path, sdk: Path) -> None:
         for payload in sorted(payloads):
             shutil.copy2(payload, destination / payload.name)
             print(f"Bundled SDK kernel payload: {payload.name}")
-    for name in ("strata", "strata-vision", "strata-vision-hip"):
+    for name in ("strata", "strata-vision", "strata-vision-hip", "strata-inkling", "strata-hy4"):
         binary = stage / name
         if binary.is_file():
             subprocess.run(

@@ -123,6 +123,15 @@ class HipPackageTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 prepare(self.stage, self.sdk)
 
+    def test_custom_shape_entrypoints_find_relocated_runtime(self) -> None:
+        for family in ("inkling", "hy4"):
+            (self.stage / f"strata-{family}").write_bytes(b"\x7fELF")
+        with patch("prepare_linux_hip_package.subprocess.run") as run:
+            prepare(self.stage, self.sdk)
+        patched = {Path(call.args[0][-1]).name for call in run.call_args_list}
+        self.assertTrue({"strata-inkling", "strata-hy4"} <= patched)
+        verify(self.stage)
+
 
 if __name__ == "__main__":
     unittest.main()

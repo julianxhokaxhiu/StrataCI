@@ -6,21 +6,25 @@ StrataCI builds the engine packages from [Niko1221/Strata](https://github.com/Ni
 
 In the **Actions** tab, run **Build Strata engines**. The workflow uses `STRATA_TAG` for both the upstream Strata checkout and this repository's release tag.
 
-Only Linux AMD HIP gfx1150 is currently enabled. The other 13 matrix entries are preserved as comments: Linux CUDA 12 and 13, Linux AMD HIP (Halo, RX 6000, RX 7900, and RX 9070), Linux Intel SYCL, macOS Apple Silicon Metal, Windows CUDA 12 and 13, and Windows AMD HIP (RDNA2, RDNA3, and RX 9070).
+Only Linux AMD HIP gfx1150 is currently enabled, with three separate jobs: Qwen (`strata-engine`), Inkling 2 Mini (`strata-inkling`), and Hy4-Flash (`strata-hy4`). Other GPU/platform entries remain commented out. Optional entries now also cover ARM64 CUDA/DGX Spark, Hy4 SYCL, and Windows Inkling Strix Halo.
 
 All five Linux HIP targets use AMD's TheRock `10.2.0a20260930` SDK with hipBLASLt 1.5.0 (`100500`). Each GPU-family tarball is verified against its own pinned SHA-256; RX 7000 uses `gfx110X-all`. Windows retains upstream's separate HIP toolchain setup.
 
 Linux HIP package versions come from the upstream HIP recipe's staged `BUILD.json`, not the top-level CMake project version. These versions can intentionally differ: Strata 0.2.6 keeps Qwen engine packages at 0.1.50 while Control and DeepSeek use 0.1.51. The package manifest and archive name follow the staged package version; a source-built binary can still report the CMake build version.
 
-### Strata 0.2.7
+### Strata 0.2.19
 
 The workflow checks out [Strata](https://github.com/Niko1221/Strata) and publishes under the same tag.
 
-The release includes Qwen performance changes for small NVIDIA cards and RX 9000 GPUs, faster DeepSeek prompting, Windows Strix Halo DeepSeek support, expanded chat UI, French localization, and engine correctness fixes. Performance improvements measured on those GPUs should not be assumed to apply to gfx1150.
+The release adds native Inkling 2 Mini engines across CUDA, HIP, SYCL, and Metal, and updates the Hy4 SYCL runner. Qwen and Inkling packages are 0.1.65. The HIP Hy4 source still reports 0.1.64; its package keeps that version rather than claiming the SYCL-only version bump.
 
-The Linux HIP toolchain stays pinned to TheRock `10.2.0a20260930`: the 0.2.7 HIP recipe retains its compiler/runtime layout, and its gfx1150 tuning table still targets hipBLASLt `100500`. Our `lib/` and `.kpack/` staging repair remains necessary. The new Windows Strix Halo DeepSeek package targets **gfx1151**, not gfx1150; this workflow still builds the gfx1150 Qwen engine and its CPU/GPU picture readers, not a DeepSeek engine for that GPU. Other targets remain commented out.
+Upstream moved its engine into `engine/`, Terminal dependencies and readers into `terminal/`, and packaging recipes into `tools/packaging/`. All build paths follow this layout. Builds use vendored ggml: they no longer download or override it with llama.cpp. Metal uses upstream's current packaging recipe, including the full quant-header text needed by runtime-compiled kernels.
 
-Linux HIP builds check required tuning tables before compilation and require them in the verified final package before archiving: `gfx1150`, `gfx1151`, `gfx1100`, and `gfx1201`. Architectures without a matching upstream table, including RX 6000, retain the engine's untuned fallback. RX 6000 does not require the SDK's hipBLASLt kernel-data directory; its rocBLAS data remains required. The native engine automatically selects a packaged table by GPU architecture and loaded hipBLASLt version. When changing the shared SDK pin, update all five checksums and verify library versions and upstream table coverage together; tuning solution IDs are not interchangeable between library versions. Builds validate packaging, not inference correctness or performance on each GPU; hardware qualification is still required.
+The Linux HIP toolchain stays pinned to TheRock `10.2.0a20260930`, with hipBLASLt `100500`. Our `lib/` and `.kpack/` staging repair remains necessary. Each enabled runner is compiled for **gfx1150 only**, including Inkling's custom HIP compile command (which otherwise defaults to many architectures). Qwen includes separate CPU/GPU picture readers; Inkling and Hy4 have built-in vision and distinct shape-component manifests. DeepSeek remains outside this workflow.
+
+The 0.2.19 Qwen source automatically enables its supported gfx11 prompt/decode paths and uses Strata's own prompt kernels instead of the removed llama.cpp MMQ path. No speculative environment overrides are applied. Measurements on RX 7900 or Strix Halo are not gfx1150 measurements; inference correctness, stability, and performance still need testing on the actual card.
+
+Qwen Linux HIP builds check required tuning tables before compilation and require them in the verified final package before archiving: `gfx1150`, `gfx1151`, `gfx1100`, and `gfx1201`. Architectures without a matching upstream table, including RX 6000, retain the engine's untuned fallback. RX 6000 does not require the SDK's hipBLASLt kernel-data directory; its rocBLAS data remains required. The native engine automatically selects a packaged table by GPU architecture and loaded hipBLASLt version. Inkling and Hy4 use their own kernels and do not require Qwen's tuning tables or BLAS kernel-data bundles. Inkling's optional dynamically loaded hipBLASLt acceleration is not bundled; its native HIP kernels remain available. When changing the shared SDK pin, update all five checksums and verify library versions and upstream table coverage together; tuning solution IDs are not interchangeable between library versions.
 
 Each enabled matrix job verifies and uploads its engine package as a temporary workflow artifact. After all enabled builds succeed, the publish job attaches the `.tar.gz` packages to a GitHub Release using `STRATA_TAG`. Disabled targets do not block publishing. Publishing to an existing release does not remove assets from previously enabled targets.
 
@@ -28,14 +32,17 @@ Linux HIP packages retain runtime libraries and rocBLAS/hipBLASLt data under `li
 
 ## Enable or add a target
 
-Edit `jobs.build.strategy.matrix.include` in [the workflow](.github/workflows/build-strata-engines.yml). To re-enable an existing OS/GPU combination, uncomment its entire entry, from `- id:` through its last field. No helper changes are needed for the existing commented entries.
+Edit `jobs.build.strategy.matrix.include` in [the workflow](.github/workflows/build-strata-engines.yml). To re-enable an existing OS/GPU combination, uncomment its entire entry, from `- id:` through its last field.
+
+To add Inkling for an existing target, copy its entry, give it a unique `id`, and set `family: inkling`. Inkling supports all existing CUDA/HIP/Metal/SYCL targets and ARM64 CUDA. Hy4 builds currently support Linux x86_64 HIP and SYCL only; use `family: hy4`. Unsupported Hy4 combinations fail explicitly. Omitted `family` defaults to Qwen.
 
 For a new combination, copy an entry with the same OS and backend, then set:
 
 | Field | Purpose |
 | --- | --- |
 | `id` | Unique artifact/job name, such as `linux-hip-gfx1150`. |
-| `os` | Runner label: currently `ubuntu-24.04`, `windows-2022`, or `macos-26`. |
+| `os` | Runner label: `ubuntu-24.04`, `ubuntu-24.04-arm`, `windows-2022`, or `macos-26`. |
+| `family` | `qwen` (default), `inkling`, or `hy4`. Each produces its own component and asset name. |
 | `backend` | `cuda`, `hip`, `sycl` (Linux only), or `metal` (macOS only). |
 | `variant` | Toolchain/package family recognized by the build helpers; use `""` for SYCL and Metal. |
 | `platform` | Package platform: `linux-x86_64`, `windows-x86_64`, or `macos-arm64`. |
@@ -56,16 +63,16 @@ Adding a matrix row alone does not add support for a new compiler, GPU architect
 
 - **Linux HIP:** add the variant to [install-rocm-linux.sh](.github/workflows/scripts/install-rocm-linux.sh), with its SDK family, pinned archive checksum, and required tuning architectures. Supply `archs` for a custom variant not recognized by upstream's `packaging/build_hip_linux.sh`. Keep the engine and GPU picture reader on the same architectures. Preserve the runtime layout and tuning checks in [build-linux-engine.sh](.github/workflows/scripts/build-linux-engine.sh) and [archive-linux-engine.sh](.github/workflows/scripts/archive-linux-engine.sh).
 - **Windows HIP:** add the same variant and architecture list to both [install-windows-hip.ps1](.github/workflows/scripts/install-windows-hip.ps1) and [archive-windows-engine.ps1](.github/workflows/scripts/archive-windows-engine.ps1). The former selects engine/reader architectures; the latter records them in package metadata.
-- **CUDA:** the supported variants are `cuda12` and `cuda13`. For a new toolkit family, update the workflow's toolkit-version selection and the appropriate build recipe: upstream's `packaging/build_cuda_linux.sh` for Linux, or [build-windows-cuda.ps1](.github/workflows/scripts/build-windows-cuda.ps1) for Windows. Set engine and picture-reader architectures, package architecture metadata, and minimum driver requirements consistently.
+- **CUDA:** the supported variants are `cuda12` and `cuda13`. For a new toolkit family, update the workflow's toolkit-version selection and the appropriate build recipe: upstream's `tools/packaging/build_cuda_linux.sh` for Linux, or [build-windows-cuda.ps1](.github/workflows/scripts/build-windows-cuda.ps1) for Windows. Set engine and picture-reader architectures, package architecture metadata, and minimum driver requirements consistently. CUDA 12 now includes `sm_120` machine code while retaining `compute_89` PTX. ARM64 uses CUDA 13.0 and `sm_121`; a hosted ARM runner builds the package but does not qualify DGX Spark hardware.
 - **macOS Metal / Linux SYCL:** use the existing entries and helpers for the supported platform. A different CPU architecture or runner OS requires checking upstream support and package platform metadata, not just changing `id`.
 
-Workflow step conditions currently match exact runner labels. If adding or changing an `os` label, update every affected setup, build, and archive condition so the job selects exactly one build path and one archive path.
+Linux conditions use `runner.os`, including the ARM runner. Desktop setup still matches the documented runner labels. If adding another OS, ensure the job selects exactly one build path and one archive path.
 
-Before publishing, verify unique IDs and asset names, run the applicable helper tests (Linux HIP: `python -m unittest discover -s .github/workflows/scripts -p 'test_prepare_linux_hip_package.py'`), and run the enabled matrix end-to-end. All enabled builds must pass before publishing; compilation and packaging checks do not replace GPU hardware testing.
+Before publishing, verify unique IDs and asset names, run `python -m unittest discover -s .github/workflows/scripts -p 'test_*.py'`, and run the enabled matrix end-to-end. All enabled builds must pass before publishing; compilation and packaging checks do not replace GPU hardware testing. The archives are unsigned local components, not additions to upstream's signed update feed.
 
 ## Repository layout
 
 - `.github/workflows/build-strata-engines.yml` defines build matrices, hosted runners, and release publishing.
 - `.github/workflows/scripts/` contains the platform-specific setup, build, packaging, and archive helpers.
 
-The Strata source is checked out during each workflow run; it is not vendored in this repository. The matrix entries use Ubuntu 24.04, macOS 26, and Windows Server 2022 runners; only the gfx1150 Ubuntu entry is currently enabled.
+The Strata source is checked out during each workflow run; it is not vendored in this repository. Only the three gfx1150 Ubuntu jobs are currently enabled.
