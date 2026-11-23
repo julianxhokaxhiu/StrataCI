@@ -6,23 +6,23 @@ StrataCI builds the engine packages from [Niko1221/Strata](https://github.com/Ni
 
 In the **Actions** tab, run **Build Strata engines**. The workflow uses `STRATA_TAG` for both the upstream Strata checkout and this repository's release tag.
 
-Only Linux AMD HIP gfx1150 is currently enabled, with three separate jobs: Qwen (`strata-engine`), Inkling 2 Mini (`strata-inkling`), and Hy4-Flash (`strata-hy4`). Other GPU/platform entries remain commented out. Optional entries now also cover ARM64 CUDA/DGX Spark, Hy4 SYCL, and Windows Inkling Strix Halo.
+Only Linux AMD HIP gfx1150 Qwen (`strata-engine`) is currently enabled. Strata 0.2.20's official Linux `rx7900` packages cover gfx1150 for Inkling 2 Mini (`strata-inkling`) and Hy4-Flash (`strata-hy4`), so those jobs are disabled. Their matrix templates and all build helpers remain available for future targets. Other GPU/platform entries remain commented out, including ARM64 CUDA/DGX Spark, Hy4 SYCL, and Windows Inkling Strix Halo.
 
 All five Linux HIP targets use AMD's TheRock `10.2.0a20260930` SDK with hipBLASLt 1.5.0 (`100500`). Each GPU-family tarball is verified against its own pinned SHA-256; RX 7000 uses `gfx110X-all`. Windows retains upstream's separate HIP toolchain setup.
 
 Linux HIP package versions come from the upstream HIP recipe's staged `BUILD.json`, not the top-level CMake project version. These versions can intentionally differ: Strata 0.2.6 keeps Qwen engine packages at 0.1.50 while Control and DeepSeek use 0.1.51. The package manifest and archive name follow the staged package version; a source-built binary can still report the CMake build version.
 
-### Strata 0.2.19
+### Strata 0.2.20
 
 The workflow checks out [Strata](https://github.com/Niko1221/Strata) and publishes under the same tag.
 
-The release adds native Inkling 2 Mini engines across CUDA, HIP, SYCL, and Metal, and updates the Hy4 SYCL runner. Qwen and Inkling packages are 0.1.65. The HIP Hy4 source still reports 0.1.64; its package keeps that version rather than claiming the SYCL-only version bump.
+The release uses engine version 0.1.66. Its [official release feed](https://github.com/Niko1221/Strata/releases/download/v0.2.20/strata-feed.json) lists gfx1150 in the Linux HIP `rx7900` packages for Inkling and Hy4, but not Qwen. Only Qwen therefore needs a custom gfx1150 build here; use the upstream packages for Inkling and Hy4.
 
 Upstream moved its engine into `engine/`, Terminal dependencies and readers into `terminal/`, and packaging recipes into `tools/packaging/`. All build paths follow this layout. Builds use vendored ggml: they no longer download or override it with llama.cpp. Metal uses upstream's current packaging recipe, including the full quant-header text needed by runtime-compiled kernels.
 
-The Linux HIP toolchain stays pinned to TheRock `10.2.0a20260930`, with hipBLASLt `100500`. Our `lib/` and `.kpack/` staging repair remains necessary. Each enabled runner is compiled for **gfx1150 only**, including Inkling's custom HIP compile command (which otherwise defaults to many architectures). Qwen includes separate CPU/GPU picture readers; Inkling and Hy4 have built-in vision and distinct shape-component manifests. DeepSeek remains outside this workflow.
+The Linux HIP toolchain stays pinned to TheRock `10.2.0a20260930`, with hipBLASLt `100500`. Our `lib/` and `.kpack/` staging repair is retained. The enabled Qwen runner is compiled for **gfx1150 only** and includes separate CPU/GPU picture readers. The retained Inkling helper also honors architecture overrides; Inkling and Hy4 have built-in vision and distinct shape-component manifests. DeepSeek remains outside this workflow.
 
-The 0.2.19 Qwen source automatically enables its supported gfx11 prompt/decode paths and uses Strata's own prompt kernels instead of the removed llama.cpp MMQ path. No speculative environment overrides are applied. Measurements on RX 7900 or Strix Halo are not gfx1150 measurements; inference correctness, stability, and performance still need testing on the actual card.
+The Qwen source automatically enables its supported gfx11 prompt/decode paths and uses Strata's own prompt kernels instead of the removed llama.cpp MMQ path. No speculative environment overrides are applied. Measurements on RX 7900 or Strix Halo are not gfx1150 measurements; inference correctness, stability, and performance still need testing on the actual card.
 
 Qwen Linux HIP builds check required tuning tables before compilation and require them in the verified final package before archiving: `gfx1150`, `gfx1151`, `gfx1100`, and `gfx1201`. Architectures without a matching upstream table, including RX 6000, retain the engine's untuned fallback. RX 6000 does not require the SDK's hipBLASLt kernel-data directory; its rocBLAS data remains required. The native engine automatically selects a packaged table by GPU architecture and loaded hipBLASLt version. Inkling and Hy4 use their own kernels and do not require Qwen's tuning tables or BLAS kernel-data bundles. Inkling's optional dynamically loaded hipBLASLt acceleration is not bundled; its native HIP kernels remain available. When changing the shared SDK pin, update all five checksums and verify library versions and upstream table coverage together; tuning solution IDs are not interchangeable between library versions.
 
@@ -75,4 +75,4 @@ Before publishing, verify unique IDs and asset names, run `python -m unittest di
 - `.github/workflows/build-strata-engines.yml` defines build matrices, hosted runners, and release publishing.
 - `.github/workflows/scripts/` contains the platform-specific setup, build, packaging, and archive helpers.
 
-The Strata source is checked out during each workflow run; it is not vendored in this repository. Only the three gfx1150 Ubuntu jobs are currently enabled.
+The Strata source is checked out during each workflow run; it is not vendored in this repository. Only the Qwen gfx1150 Ubuntu job is currently enabled.

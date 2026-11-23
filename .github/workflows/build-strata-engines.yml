@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  STRATA_TAG: v0.2.19
+  STRATA_TAG: v0.2.20
 
 permissions:
   contents: read
@@ -26,23 +26,22 @@ jobs:
             archs: gfx1150
             platform: linux-x86_64
 
-          - id: linux-inkling-hip-gfx1150
-            os: ubuntu-24.04
-            family: inkling
-            backend: hip
-            variant: gfx1150
-            archs: gfx1150
-            platform: linux-x86_64
-
-          - id: linux-hy4-hip-gfx1150
-            os: ubuntu-24.04
-            family: hy4
-            backend: hip
-            variant: gfx1150
-            archs: gfx1150
-            platform: linux-x86_64
-
           # Uncomment a target block to enable it; see README.md for new targets.
+          # Upstream 0.2.20 covers gfx1150 in Inkling and Hy4's Linux rx7900 packages.
+          # - id: linux-inkling-hip-gfx1150
+          #   os: ubuntu-24.04
+          #   family: inkling
+          #   backend: hip
+          #   variant: gfx1150
+          #   archs: gfx1150
+          #   platform: linux-x86_64
+          # - id: linux-hy4-hip-gfx1150
+          #   os: ubuntu-24.04
+          #   family: hy4
+          #   backend: hip
+          #   variant: gfx1150
+          #   archs: gfx1150
+          #   platform: linux-x86_64
           # Existing entries default to Qwen; copy one with family: inkling for Inkling.
           # - id: linux-cuda13-arm64
           #   os: ubuntu-24.04-arm
