@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  STRATA_TAG: v0.2.20
+  STRATA_TAG: v0.2.23
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
             platform: linux-x86_64
 
           # Uncomment a target block to enable it; see README.md for new targets.
-          # Upstream 0.2.20 covers gfx1150 in Inkling and Hy4's Linux rx7900 packages.
+          # Upstream 0.2.23's feed covers gfx1150 for Inkling and Hy4; Hy4 remains at package version 0.1.67.
           # - id: linux-inkling-hip-gfx1150
           #   os: ubuntu-24.04
           #   family: inkling

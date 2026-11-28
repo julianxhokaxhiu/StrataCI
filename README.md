@@ -6,17 +6,17 @@ StrataCI builds the engine packages from [Niko1221/Strata](https://github.com/Ni
 
 In the **Actions** tab, run **Build Strata engines**. The workflow uses `STRATA_TAG` for both the upstream Strata checkout and this repository's release tag.
 
-Only Linux AMD HIP gfx1150 Qwen (`strata-engine`) is currently enabled. Strata 0.2.20's official Linux `rx7900` packages cover gfx1150 for Inkling 2 Mini (`strata-inkling`) and Hy4-Flash (`strata-hy4`), so those jobs are disabled. Their matrix templates and all build helpers remain available for future targets. Other GPU/platform entries remain commented out, including ARM64 CUDA/DGX Spark, Hy4 SYCL, and Windows Inkling Strix Halo.
+Only Linux AMD HIP gfx1150 Qwen (`strata-engine`) is enabled. The Strata 0.2.23 feed already supports gfx1150 with Inkling (`strata-inkling`) and Hy4 (`strata-hy4`); Hy4's package remains at 0.1.67, but no custom job is needed for an officially supported target. Other GPU/platform entries remain commented out, including ARM64 CUDA/DGX Spark, Hy4 SYCL, and Windows Inkling Strix Halo.
 
 All five Linux HIP targets use AMD's TheRock `10.2.0a20260930` SDK with hipBLASLt 1.5.0 (`100500`). Each GPU-family tarball is verified against its own pinned SHA-256; RX 7000 uses `gfx110X-all`. Windows retains upstream's separate HIP toolchain setup.
 
-Linux HIP package versions come from the upstream HIP recipe's staged `BUILD.json`, not the top-level CMake project version. These versions can intentionally differ: Strata 0.2.6 keeps Qwen engine packages at 0.1.50 while Control and DeepSeek use 0.1.51. The package manifest and archive name follow the staged package version; a source-built binary can still report the CMake build version.
+Linux HIP package versions come from the upstream HIP recipe's staged `BUILD.json`, not the top-level CMake project version. For Strata 0.2.23, the source recipe stages Qwen at 0.1.70, while the official Linux Qwen HIP packages in that release remain at 0.1.69. The package manifest and archive name follow the staged package version; a source-built binary can still report the CMake build version.
 
-### Strata 0.2.20
+### Strata 0.2.23
 
 The workflow checks out [Strata](https://github.com/Niko1221/Strata) and publishes under the same tag.
 
-The release uses engine version 0.1.66. Its [official release feed](https://github.com/Niko1221/Strata/releases/download/v0.2.20/strata-feed.json) lists gfx1150 in the Linux HIP `rx7900` packages for Inkling and Hy4, but not Qwen. Only Qwen therefore needs a custom gfx1150 build here; use the upstream packages for Inkling and Hy4.
+The release's current engine version is 0.1.70. Its [official release feed](https://github.com/Niko1221/Strata/releases/download/v0.2.23/strata-feed.json) lists the Linux Qwen `rx7900` package at 0.1.69 for gfx1100-gfx1102, not gfx1150, so Qwen needs a custom gfx1150 build. Inkling 0.1.70 and Hy4 0.1.67 already cover gfx1150. The v0.2.23 source updates Hy4's reader for 16 KiB-aligned `.strata` headers, but we leave the officially supported Hy4 target to upstream.
 
 Upstream moved its engine into `engine/`, Terminal dependencies and readers into `terminal/`, and packaging recipes into `tools/packaging/`. All build paths follow this layout. Builds use vendored ggml: they no longer download or override it with llama.cpp. Metal uses upstream's current packaging recipe, including the full quant-header text needed by runtime-compiled kernels.
 
